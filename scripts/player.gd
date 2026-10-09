@@ -22,6 +22,8 @@ var locked := false
 func _ready() -> void:
 	var m := MeshKit.load_model(MODEL_PATH)
 	if m:
+		# Made facing Blender's Front view (imports facing +Z); the game's forward is -Z.
+		m.rotation.y = PI
 		model.add_child(m)
 	else:
 		_build_placeholder()

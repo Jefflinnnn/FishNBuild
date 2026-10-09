@@ -26,9 +26,13 @@ func setup(d: FurnitureData, ghost := false) -> void:
 		c.queue_free()
 	var m := MeshKit.load_model(d.model_path)
 	if m:
+		# Models are made facing Blender's Front view, which imports facing +Z.
+		m.rotation.y = PI
 		add_child(m)
 	else:
 		_build_placeholder()
+	if d.shape == "lamp":
+		_add_lamp_light()
 	if ghost:
 		_apply_ghost()
 
@@ -61,6 +65,16 @@ func _geometry(n: Node) -> Array[GeometryInstance3D]:
 	return out
 
 
+## The game adds the light, so a lamp model only needs an emissive bulb at ~1.6 m.
+func _add_lamp_light() -> void:
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.85, 0.55)
+	light.light_energy = 0.9
+	light.omni_range = 3.0
+	light.position = Vector3(0, 1.45, 0)
+	add_child(light)
+
+
 func _build_placeholder() -> void:
 	var c := data.color
 	match data.shape:
@@ -91,12 +105,6 @@ func _build_placeholder() -> void:
 			MeshKit.cylinder(self, 0.03, 1.5, Color("4a4a52"), Vector3.ZERO)
 			MeshKit.sphere(self, 0.13, c, Vector3(0, 1.6, 0), 3.0)
 			MeshKit.cylinder(self, 0.2, 0.12, Color("3a3a42"), Vector3(0, 1.66, 0), 0.08)
-			var light := OmniLight3D.new()
-			light.light_color = Color(1.0, 0.85, 0.55)
-			light.light_energy = 0.9
-			light.omni_range = 3.0
-			light.position = Vector3(0, 1.45, 0)
-			add_child(light)
 		"shrub":
 			for s in [[Vector3(-0.15, 0.22, 0.05), 0.26], [Vector3(0.17, 0.2, -0.05), 0.24], [Vector3(0, 0.4, 0), 0.25],
 					[Vector3(0.02, 0.18, 0.18), 0.2], [Vector3(-0.05, 0.2, -0.2), 0.2]]:
