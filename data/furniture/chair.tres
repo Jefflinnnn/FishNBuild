@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="FurnitureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/furniture_data.gd" id="1_furn"]
+
+[resource]
+script = ExtResource("1_furn")
+id = "chair"
+display_name = "Chair"
+price = 15
+order = 1
+shape = "chair"
+color = Color(0.85, 0.45, 0.4, 1)
+sprite_path = "res://art/furniture_chair.png"
+is_tile = false
+bite_speed_bonus = 0.0

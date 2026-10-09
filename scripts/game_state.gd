@@ -6,21 +6,60 @@ signal money_changed(money: int)
 signal bucket_changed(bucket: Array)
 
 const FISH_DIR := "res://data/fish/"
+const FURNITURE_DIR := "res://data/furniture/"
 const BUCKET_CAP := 10
+## Testing switch: true = building costs nothing. Set false once the shop/prices matter.
+const FREE_BUILD := true
 
 var money := 0
 var bucket: Array[FishData] = []
 var fish_table: Array[FishData] = []
+## Sorted by hotbar order.
+var furniture_table: Array[FurnitureData] = []
 
 
 func _ready() -> void:
-	for file in ResourceLoader.list_directory(FISH_DIR):
-		if file.ends_with(".tres") or file.ends_with(".res"):
-			var f := load(FISH_DIR + file) as FishData
-			if f:
-				fish_table.append(f)
+	for r in _load_dir(FISH_DIR):
+		if r is FishData:
+			fish_table.append(r)
+	for r in _load_dir(FURNITURE_DIR):
+		if r is FurnitureData:
+			furniture_table.append(r)
+	furniture_table.sort_custom(func(a, b): return a.order < b.order)
 	if fish_table.is_empty():
 		push_error("No fish found in %s" % FISH_DIR)
+
+
+func _load_dir(dir: String) -> Array[Resource]:
+	var out: Array[Resource] = []
+	for file in ResourceLoader.list_directory(dir):
+		if file.ends_with(".tres") or file.ends_with(".res"):
+			var r := load(dir + file)
+			if r:
+				out.append(r)
+	return out
+
+
+func can_afford(price: int) -> bool:
+	return FREE_BUILD or money >= price
+
+
+## Pays for an item. Returns false (and spends nothing) if you can't afford it.
+func spend(price: int) -> bool:
+	if FREE_BUILD:
+		return true
+	if money < price:
+		return false
+	money -= price
+	money_changed.emit(money)
+	return true
+
+
+func refund(price: int) -> void:
+	if FREE_BUILD:
+		return
+	money += price
+	money_changed.emit(money)
 
 
 ## Weighted random pick from the fish table.

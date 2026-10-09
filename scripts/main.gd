@@ -1,6 +1,6 @@
 extends Node2D
 ## Grid MVP: walk around a 16x16 isometric lake, fish from the shore or a dock,
-## sell the bucket at the selling box, and place/remove dock tiles in build mode.
+## sell the bucket at the selling box, and build docks and furniture in build mode.
 
 const START_CELL := Vector2i(3, 3)
 
@@ -13,8 +13,9 @@ const START_CELL := Vector2i(3, 3)
 @onready var hud: Label = $UI/Hud
 @onready var hint: Label = $UI/Hint
 @onready var reel_bar: Control = $UI/ReelBar
+@onready var builder: Node = $Builder
+@onready var hotbar: HBoxContainer = $UI/Hotbar
 
-var build_mode := false
 var hovered := Vector2i(-1, -1)
 var _message := ""
 var _message_time := 0.0
@@ -33,16 +34,15 @@ func _ready() -> void:
 	fishing.reel_bar = reel_bar
 	fishing.caught.connect(_on_caught)
 	fishing.message.connect(_show_message)
+	builder.setup(grid, player, $World/Objects, cursor, hotbar)
+	builder.message.connect(_show_message)
 	_show_message("Walk to the water and press Space to cast.", 6.0)
 
 
 func _process(delta: float) -> void:
 	player.locked = fishing.is_busy()
 	hovered = grid.world_to_cell(get_global_mouse_position())
-	cursor.visible = build_mode and grid.in_bounds(hovered)
-	if cursor.visible:
-		cursor.global_position = grid.cell_to_world(hovered)
-		cursor.valid = grid.can_place_dock(hovered) or _can_remove(hovered)
+	builder.update(hovered)
 	if _message_time > 0.0:
 		_message_time -= delta
 	_update_hud()
@@ -50,15 +50,12 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_build") and not fishing.is_busy():
-		build_mode = not build_mode
-	elif build_mode:
-		if event is InputEventMouseButton and event.pressed:
-			var cell := grid.world_to_cell(get_global_mouse_position())
-			if event.button_index == MOUSE_BUTTON_LEFT and grid.can_place_dock(cell):
-				grid.set_kind(cell, IsoGrid.Kind.DOCK)
-			elif event.button_index == MOUSE_BUTTON_RIGHT and _can_remove(cell):
-				grid.set_kind(cell, IsoGrid.Kind.WATER)
+		builder.active = not builder.active
+	elif builder.active:
+		builder.handle_input(event, grid.world_to_cell(get_global_mouse_position()))
 	elif event.is_action_pressed("action"):
+		if not fishing.is_busy():
+			fishing.wait_multiplier = builder.wait_multiplier_at(player.current_cell())
 		fishing.press_action()
 	elif event.is_action_pressed("interact") and _near_box():
 		_sell()
@@ -85,11 +82,6 @@ func _on_caught(fish: FishData) -> void:
 	_show_message("Caught a %s. Bucket %d/%d." % [fish.display_name, Game.bucket.size(), Game.BUCKET_CAP])
 
 
-func _can_remove(cell: Vector2i) -> bool:
-	# Never pull the dock out from under the player.
-	return grid.can_remove_dock(cell) and cell != player.current_cell()
-
-
 func _show_message(text: String, seconds := 2.5) -> void:
 	_message = text
 	_message_time = seconds
@@ -101,12 +93,13 @@ func _update_hud() -> void:
 	var lines: PackedStringArray = []
 	if _message_time > 0.0:
 		lines.append(_message)
-	if build_mode:
-		lines.append("BUILD MODE  -  left-click water edge: place dock   right-click dock: remove   B: exit")
+	if builder.active:
+		lines.append("BUILD  -  1-6 / click: pick item   Left-click: place, or pick up to move   Right-click: remove   R: flip   B: done")
 	elif not fishing.is_busy():
 		var prompts: PackedStringArray = ["WASD: move", "B: build"]
 		if fishing.can_cast():
-			prompts.append("Space: cast")
+			var m: float = builder.wait_multiplier_at(player.current_cell())
+			prompts.append("Space: cast" + ("  (lamp nearby: faster bites)" if m < 1.0 else ""))
 		if _near_box() and not Game.bucket.is_empty():
 			prompts.append("E: sell fish ($%d)" % Game.bucket_value())
 		lines.append("   ".join(prompts))

@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/iso_grid.gd" id="2_grid"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/fishing.gd" id="5_fishing"]
 [ext_resource type="Script" path="res://scripts/selling_box.gd" id="6_box"]
 [ext_resource type="Script" path="res://scripts/reel_bar.gd" id="7_reel"]
+[ext_resource type="Script" path="res://scripts/builder.gd" id="8_builder"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -54,8 +55,8 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -90.0
-offset_bottom = -20.0
+offset_top = -160.0
+offset_bottom = -84.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -73,9 +74,27 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -230.0
-offset_top = -210.0
+offset_top = -270.0
 offset_right = 230.0
-offset_bottom = -110.0
+offset_bottom = -170.0
 grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("7_reel")
+
+[node name="Hotbar" type="HBoxContainer" parent="UI"]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -74.0
+offset_right = 350.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+alignment = 1
+
+[node name="Builder" type="Node" parent="."]
+script = ExtResource("8_builder")
