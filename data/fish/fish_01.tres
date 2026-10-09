@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FishData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fish_data.gd" id="1_fish"]
+
+[resource]
+script = ExtResource("1_fish")
+id = "bluegill"
+display_name = "Bluegill"
+price = 5
+weight = 3.0
+difficulty = 0.2
+sprite_path = "res://art/fish_01.png"
+color = Color(0.36, 0.55, 0.85, 1)

@@ -21,6 +21,9 @@ const COLORS := {
 const LAKE_CENTER := Vector2(10.5, 9.5)
 const LAKE_RADIUS := Vector2(4.6, 5.2)
 
+## Cells occupied by solid objects (e.g. the selling box). cell -> node
+var blocked := {}
+
 
 func _ready() -> void:
 	tile_set = _build_tileset()
@@ -83,8 +86,14 @@ func set_kind(cell: Vector2i, kind: int) -> void:
 
 
 func is_walkable(cell: Vector2i) -> bool:
+	if blocked.has(cell):
+		return false
 	var k := get_kind(cell)
 	return k == Kind.GRASS or k == Kind.DOCK
+
+
+func is_water(cell: Vector2i) -> bool:
+	return get_kind(cell) == Kind.WATER
 
 
 ## World position -> grid cell.

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FishData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fish_data.gd" id="1_fish"]
+
+[resource]
+script = ExtResource("1_fish")
+id = "rainbow_trout"
+display_name = "Rainbow Trout"
+price = 15
+weight = 1.0
+difficulty = 0.6
+sprite_path = "res://art/fish_02.png"
+color = Color(0.93, 0.55, 0.6, 1)
