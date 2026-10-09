@@ -1,83 +1,108 @@
 class_name Furniture
-extends Node2D
-## A placed (or ghost) piece of furniture. Origin = center of its tile's diamond,
-## so Y-sorting works. Draws a placeholder shape until its PNG exists.
+extends Node3D
+## A placed (or ghost) piece of furniture standing on one tile. Origin = tile's
+## top center. Builds placeholder primitives until its .glb model exists.
+
+const GHOST_OK := Color(1, 1, 1)
+const GHOST_BAD := Color(1, 0.3, 0.3)
 
 var data: FurnitureData
 var cell := Vector2i.ZERO
-var flipped := false:
+## Quarter turns (0-3); R rotates by 90 degrees.
+var turns := 0:
 	set(v):
-		flipped = v
-		scale.x = -1.0 if v else 1.0
+		turns = posmod(v, 4)
+		rotation.y = turns * PI / 2.0
 
-var _sprite: Sprite2D
+var _ghost := false
+var _ghost_valid := true
+var _bad_overlay: StandardMaterial3D
 
 
-func setup(d: FurnitureData) -> void:
+func setup(d: FurnitureData, ghost := false) -> void:
 	data = d
-	if _sprite:
-		_sprite.queue_free()
-		_sprite = null
-	var tex := d.get_texture()
-	if tex:
-		_sprite = Sprite2D.new()
-		_sprite.texture = tex
-		# Bottom of the art sits on the diamond's lower point (+32 px).
-		_sprite.offset = Vector2(0, -tex.get_height() / 2.0 + IsoGrid.TILE.y / 2.0)
-		add_child(_sprite)
-	queue_redraw()
+	_ghost = ghost
+	for c in get_children():
+		c.queue_free()
+	var m := MeshKit.load_model(d.model_path)
+	if m:
+		add_child(m)
+	else:
+		_build_placeholder()
+	if ghost:
+		_apply_ghost()
 
 
-func _draw() -> void:
-	if data == null or _sprite:
-		return
+## Ghost look: see-through, red when the spot is invalid.
+func set_ghost(on: bool, valid := true) -> void:
+	_ghost = on
+	_ghost_valid = valid
+	_apply_ghost()
+
+
+func _apply_ghost() -> void:
+	if _bad_overlay == null:
+		_bad_overlay = StandardMaterial3D.new()
+		_bad_overlay.albedo_color = Color(1, 0.2, 0.2, 0.55)
+		_bad_overlay.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_bad_overlay.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	for g in _geometry(self):
+		g.transparency = 0.45 if _ghost else 0.0
+		g.material_overlay = _bad_overlay if (_ghost and not _ghost_valid) else null
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if _ghost else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	for l in find_children("*", "Light3D", true, false):
+		(l as Light3D).visible = not _ghost
+
+
+func _geometry(n: Node) -> Array[GeometryInstance3D]:
+	var out: Array[GeometryInstance3D] = []
+	for c in n.find_children("*", "GeometryInstance3D", true, false):
+		out.append(c)
+	return out
+
+
+func _build_placeholder() -> void:
 	var c := data.color
 	match data.shape:
 		"dock":
-			var h := Vector2(IsoGrid.TILE) / 2.0
-			draw_colored_polygon(PackedVector2Array([Vector2(0, -h.y), Vector2(h.x, 0), Vector2(0, h.y), Vector2(-h.x, 0)]), c)
+			for i in 4:
+				MeshKit.box(self, Vector3(0.23, 0.08, 1.0), c.darkened(0.06 * (i % 2)), Vector3(-0.375 + i * 0.25, -0.08, 0))
 		"chair":
-			_box(Vector2(-6, -10), 18, 9, 58, c.darkened(0.15))   # back rest
-			_box(Vector2(4, 4), 20, 10, 24, c)                     # seat
+			for p in [Vector2(-0.18, -0.18), Vector2(0.18, -0.18), Vector2(-0.18, 0.18), Vector2(0.18, 0.18)]:
+				MeshKit.box(self, Vector3(0.05, 0.3, 0.05), c.darkened(0.35), Vector3(p.x, 0, p.y))
+			MeshKit.box(self, Vector3(0.46, 0.07, 0.46), c, Vector3(0, 0.3, 0))
+			MeshKit.box(self, Vector3(0.46, 0.45, 0.06), c.darkened(0.12), Vector3(0, 0.37, 0.2))
 		"desk":
-			_box(Vector2.ZERO, 48, 24, 38, c)
-			draw_line(Vector2(-30, -10), Vector2(-14, -2), c.darkened(0.45), 2.0)  # drawer
-			_box(Vector2(14, -38), 10, 5, 14, Color("e9e4d8"))     # paper stack
+			for p in [Vector2(-0.38, -0.25), Vector2(0.38, -0.25), Vector2(-0.38, 0.25), Vector2(0.38, 0.25)]:
+				MeshKit.box(self, Vector3(0.07, 0.55, 0.07), c.darkened(0.3), Vector3(p.x, 0, p.y))
+			MeshKit.box(self, Vector3(0.9, 0.06, 0.62), c, Vector3(0, 0.55, 0))
+			MeshKit.box(self, Vector3(0.3, 0.16, 0.5), c.darkened(0.15), Vector3(0.24, 0.39, 0))  # drawer
+			MeshKit.box(self, Vector3(0.22, 0.03, 0.3), Color("efeae0"), Vector3(-0.15, 0.61, 0))  # paper
+			MeshKit.cylinder(self, 0.04, 0.09, Color("4a6fa5"), Vector3(-0.32, 0.61, -0.15))  # pen cup
 		"coffee":
-			_ellipse(Vector2.ZERO, Vector2(18, 9), Color(0, 0, 0, 0.2))
-			draw_rect(Rect2(-3, -26, 6, 26), c.darkened(0.5))
-			_ellipse(Vector2(0, -28), Vector2(24, 12), Color("8a5a3c"))
-			draw_rect(Rect2(-6, -44, 12, 14), c)                   # cup
-			_ellipse(Vector2(0, -44), Vector2(6, 3), Color("6b3e26"))
-			draw_arc(Vector2(8, -37), 4, -PI / 2, PI / 2, 8, c, 2.0)
+			MeshKit.cylinder(self, 0.06, 0.38, Color("6b4a35"), Vector3.ZERO)
+			MeshKit.cylinder(self, 0.18, 0.02, Color("6b4a35"), Vector3.ZERO)
+			MeshKit.cylinder(self, 0.3, 0.05, Color("8a5a3c"), Vector3(0, 0.38, 0))
+			MeshKit.cylinder(self, 0.06, 0.11, c, Vector3(0.05, 0.43, 0))  # cup
+			MeshKit.cylinder(self, 0.05, 0.01, Color("5a3420"), Vector3(0.05, 0.54, 0))  # coffee
+			MeshKit.cylinder(self, 0.1, 0.01, c.darkened(0.1), Vector3(0.05, 0.43, 0))  # saucer
 		"lamp":
-			_ellipse(Vector2.ZERO, Vector2(54, 27), Color(1, 0.9, 0.5, 0.18))  # light pool
-			_ellipse(Vector2.ZERO, Vector2(12, 6), Color("4a4a52"))
-			draw_line(Vector2(0, 0), Vector2(0, -96), Color("4a4a52"), 4.0)
-			draw_circle(Vector2(0, -104), 18, Color(c, 0.35))
-			draw_circle(Vector2(0, -104), 11, c)
+			MeshKit.cylinder(self, 0.14, 0.05, Color("4a4a52"), Vector3.ZERO)
+			MeshKit.cylinder(self, 0.03, 1.5, Color("4a4a52"), Vector3.ZERO)
+			MeshKit.sphere(self, 0.13, c, Vector3(0, 1.6, 0), 3.0)
+			MeshKit.cylinder(self, 0.2, 0.12, Color("3a3a42"), Vector3(0, 1.66, 0), 0.08)
+			var light := OmniLight3D.new()
+			light.light_color = Color(1.0, 0.85, 0.55)
+			light.light_energy = 0.9
+			light.omni_range = 3.0
+			light.position = Vector3(0, 1.45, 0)
+			add_child(light)
 		"shrub":
-			_ellipse(Vector2.ZERO, Vector2(30, 15), Color(0, 0, 0, 0.2))
-			for p in [Vector2(-16, -16), Vector2(16, -16), Vector2(0, -34), Vector2(-8, -10), Vector2(10, -8)]:
-				draw_circle(p, 18, c.darkened(0.1 if p.y < -20 else 0.0))
-			draw_circle(Vector2(-6, -36), 6, Color("f3a6c0"))  # a flower
-			draw_circle(Vector2(14, -20), 5, Color("fff2a8"))
+			for s in [[Vector3(-0.15, 0.22, 0.05), 0.26], [Vector3(0.17, 0.2, -0.05), 0.24], [Vector3(0, 0.4, 0), 0.25],
+					[Vector3(0.02, 0.18, 0.18), 0.2], [Vector3(-0.05, 0.2, -0.2), 0.2]]:
+				MeshKit.sphere(self, s[1], c.darkened(0.08 if s[0].y > 0.3 else 0.0), s[0])
+			MeshKit.sphere(self, 0.06, Color("f3a6c0"), Vector3(-0.12, 0.55, 0.12))
+			MeshKit.sphere(self, 0.05, Color("fff2a8"), Vector3(0.22, 0.38, 0.12))
+			MeshKit.sphere(self, 0.05, Color("f3a6c0"), Vector3(0.1, 0.3, 0.32))
 		_:
-			_box(Vector2.ZERO, 30, 15, 30, c)
-
-
-## Isometric box standing on `at` (ground point), half-width hw, half-depth hh.
-func _box(at: Vector2, hw: float, hh: float, tall: float, c: Color) -> void:
-	var t := Vector2(0, -tall)
-	var top := PackedVector2Array([at + t + Vector2(0, -hh), at + t + Vector2(hw, 0), at + t + Vector2(0, hh), at + t + Vector2(-hw, 0)])
-	var left := PackedVector2Array([at + t + Vector2(-hw, 0), at + t + Vector2(0, hh), at + Vector2(0, hh), at + Vector2(-hw, 0)])
-	var right := PackedVector2Array([at + t + Vector2(hw, 0), at + t + Vector2(0, hh), at + Vector2(0, hh), at + Vector2(hw, 0)])
-	draw_colored_polygon(left, c.darkened(0.15))
-	draw_colored_polygon(right, c.darkened(0.3))
-	draw_colored_polygon(top, c.lightened(0.1))
-
-
-func _ellipse(at: Vector2, r: Vector2, c: Color) -> void:
-	draw_set_transform(at, 0, Vector2(1, r.y / r.x))
-	draw_circle(Vector2.ZERO, r.x, c)
-	draw_set_transform(Vector2.ZERO)
+			MeshKit.box(self, Vector3(0.6, 0.6, 0.6), c)

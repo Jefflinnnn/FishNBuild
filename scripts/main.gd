@@ -1,15 +1,16 @@
-extends Node2D
-## Grid MVP: walk around a 16x16 isometric lake, fish from the shore or a dock,
+extends Node3D
+## 3D isometric MVP: walk around a 16x16 lake, fish from the shore or a dock,
 ## sell the bucket at the selling box, and build docks and furniture in build mode.
 
 const START_CELL := Vector2i(3, 3)
 
 @onready var grid: IsoGrid = $World/Ground
-@onready var player: Node2D = $World/Objects/Player
-@onready var fishing: Node2D = $World/Objects/Fishing
-@onready var selling_box: Node2D = $World/Objects/SellingBox
-@onready var cursor: Node2D = $World/Cursor
-@onready var fx: Node2D = $World/Fx
+@onready var player: Node3D = $World/Objects/Player
+@onready var fishing: Node3D = $World/Objects/Fishing
+@onready var selling_box: Node3D = $World/Objects/SellingBox
+@onready var cursor: Node3D = $World/Cursor
+@onready var fx: Node3D = $World/Fx
+@onready var camera: Camera3D = $Camera
 @onready var hud: Label = $UI/Hud
 @onready var hint: Label = $UI/Hint
 @onready var reel_bar: Control = $UI/ReelBar
@@ -28,6 +29,9 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	player.grid = grid
 	player.global_position = grid.cell_to_world(START_CELL)
+	camera.target = player
+	camera.snap()
+	player.camera_yaw = camera.rotation.y
 	selling_box.setup(grid)
 	fishing.grid = grid
 	fishing.player = player
@@ -41,7 +45,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	player.locked = fishing.is_busy()
-	hovered = grid.world_to_cell(get_global_mouse_position())
+	var hit: Variant = camera.mouse_on_plane(IsoGrid.GROUND_Y)
+	hovered = grid.world_to_cell(hit) if hit != null else Vector2i(-1, -1)
 	builder.update(hovered)
 	if _message_time > 0.0:
 		_message_time -= delta
@@ -52,7 +57,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_build") and not fishing.is_busy():
 		builder.active = not builder.active
 	elif builder.active:
-		builder.handle_input(event, grid.world_to_cell(get_global_mouse_position()))
+		builder.handle_input(event, hovered)
 	elif event.is_action_pressed("action"):
 		if not fishing.is_busy():
 			fishing.wait_multiplier = builder.wait_multiplier_at(player.current_cell())
@@ -72,12 +77,12 @@ func _sell() -> void:
 	var n := Game.bucket.size()
 	var earned := Game.sell_all()
 	Sfx.play("coin")
-	PopupText.spawn(fx, selling_box.global_position + Vector2(0, -80), "+$%d" % earned, Color("ffd34d"), 32)
+	PopupText.spawn(fx, selling_box.global_position + Vector3(0, 1.1, 0), "+$%d" % earned, Color("ffd34d"), 90)
 	_show_message("Sold %d fish for $%d." % [n, earned])
 
 
 func _on_caught(fish: FishData) -> void:
-	PopupText.spawn(fx, player.global_position + Vector2(0, -110), "%s!  ($%d)" % [fish.display_name, fish.price],
+	PopupText.spawn(fx, player.global_position + Vector3(0, 1.6, 0), "%s!  ($%d)" % [fish.display_name, fish.price],
 		fish.color.lightened(0.3))
 	_show_message("Caught a %s. Bucket %d/%d." % [fish.display_name, Game.bucket.size(), Game.BUCKET_CAP])
 
@@ -94,9 +99,9 @@ func _update_hud() -> void:
 	if _message_time > 0.0:
 		lines.append(_message)
 	if builder.active:
-		lines.append("BUILD  -  1-6 / click: pick item   Left-click: place, or pick up to move   Right-click: remove   R: flip   B: done")
+		lines.append("BUILD  -  1-6 / click: pick item   Left-click: place, or pick up to move   Right-click: remove   R: rotate   B: done")
 	elif not fishing.is_busy():
-		var prompts: PackedStringArray = ["WASD: move", "B: build"]
+		var prompts: PackedStringArray = ["WASD: move", "B: build", "Wheel: zoom"]
 		if fishing.can_cast():
 			var m: float = builder.wait_multiplier_at(player.current_cell())
 			prompts.append("Space: cast" + ("  (lamp nearby: faster bites)" if m < 1.0 else ""))

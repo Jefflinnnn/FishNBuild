@@ -10,6 +10,6 @@ price = 12
 order = 3
 shape = "coffee"
 color = Color(0.95, 0.9, 0.82, 1)
-sprite_path = "res://art/furniture_coffee.png"
+model_path = "res://art/models/coffee.glb"
 is_tile = false
 bite_speed_bonus = 0.0

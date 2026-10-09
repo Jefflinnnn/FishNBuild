@@ -2,7 +2,7 @@ extends Node
 ## Build mode: pick an item from the hotbar (1-6 or click), then
 ##   left-click  = place it / pick up an existing piece to move it / drop it
 ##   right-click = remove the piece under the cursor (or cancel a move)
-##   R           = flip the held item, the ghost, or the piece under the cursor
+##   R           = rotate the held item, the ghost, or the piece under the cursor 90 degrees
 ## Everything placed lives in `placed` (cell -> Furniture), ready for save/load.
 
 signal message(text: String)
@@ -11,9 +11,9 @@ const LAMP_RANGE := 2
 const MIN_WAIT_MULT := 0.4
 
 var grid: IsoGrid
-var player: Node2D
-var objects: Node2D       # y-sorted parent for placed furniture
-var cursor: Node2D
+var player: Node3D
+var objects: Node3D       # parent for placed furniture
+var cursor: Node3D
 var hotbar: HBoxContainer
 
 var active := false:
@@ -29,23 +29,21 @@ var selected := 0
 var placed := {}          # Vector2i -> Furniture
 
 var _ghost: Furniture
-var _ghost_flipped := false
+var _ghost_turns := 0
 var _held: Furniture      # piece being moved
 var _held_from := Vector2i.ZERO
-var _held_flip := false
+var _held_turns := 0
 var _buttons: Array[Button] = []
 
 
-func setup(g: IsoGrid, p: Node2D, objs: Node2D, cur: Node2D, bar: HBoxContainer) -> void:
+func setup(g: IsoGrid, p: Node3D, objs: Node3D, cur: Node3D, bar: HBoxContainer) -> void:
 	grid = g
 	player = p
 	objects = objs
 	cursor = cur
 	hotbar = bar
 	_ghost = Furniture.new()
-	_ghost.modulate = Color(1, 1, 1, 0.55)
-	_ghost.z_index = 5
-	objects.get_parent().add_child(_ghost)
+	objects.add_child(_ghost)
 	_build_hotbar()
 	select(0)
 	active = false
@@ -59,8 +57,8 @@ func select(i: int) -> void:
 	if i < 0 or i >= Game.furniture_table.size():
 		return
 	selected = i
-	_ghost.setup(item())
-	_ghost.flipped = _ghost_flipped
+	_ghost.setup(item(), true)
+	_ghost.turns = _ghost_turns
 	for b in _buttons.size():
 		_buttons[b].set_pressed_no_signal(b == i)
 
@@ -78,20 +76,28 @@ func update(hovered: Vector2i) -> void:
 			_held.visible = false
 		return
 	var pos := grid.cell_to_world(hovered)
-	cursor.global_position = pos
+	cursor.global_position = pos + Vector3(0, 0.02, 0)
 	if _held:
-		_held.visible = true
-		_held.global_position = pos
 		var ok := _can_place(_held.data, hovered)
-		_held.modulate = Color(1, 1, 1, 0.7) if ok else Color(1, 0.45, 0.45, 0.7)
+		_held.visible = true
+		_held.global_position = _stand_pos(_held.data, hovered)
+		_held.set_ghost(true, ok)
 		cursor.valid = ok
 	elif placed.has(hovered):
 		cursor.valid = true   # can pick up / remove
 	else:
-		_ghost.global_position = pos
 		var ok := _can_place(item(), hovered) and Game.can_afford(item().price)
-		_ghost.modulate = Color(1, 1, 1, 0.55) if ok else Color(1, 0.45, 0.45, 0.55)
+		_ghost.global_position = _stand_pos(item(), hovered)
+		_ghost.set_ghost(true, ok)
 		cursor.valid = ok or _can_remove_dock(hovered)
+
+
+## Where an item stands on a tile (docks sit at deck height over the water).
+func _stand_pos(d: FurnitureData, cell: Vector2i) -> Vector3:
+	var p := grid.cell_to_world(cell)
+	if d.is_tile:
+		p.y = IsoGrid.GROUND_Y
+	return p
 
 
 # --- Input ------------------------------------------------------------------
@@ -103,7 +109,7 @@ func handle_input(event: InputEvent, hovered: Vector2i) -> bool:
 			select(k - KEY_1)
 			return true
 		if k == KEY_R:
-			_flip(hovered)
+			_rotate(hovered)
 			return true
 		if k == KEY_ESCAPE and _held:
 			_cancel_move()
@@ -124,7 +130,7 @@ func _left_click(cell: Vector2i) -> void:
 	if _held:
 		if _can_place(_held.data, cell):
 			_put(_held, cell)
-			_held.modulate = Color.WHITE
+			_held.set_ghost(false)
 			_held = null
 		else:
 			message.emit("Can't put that there.")
@@ -147,14 +153,14 @@ func _right_click(cell: Vector2i) -> void:
 		Game.refund(_dock_price())
 
 
-func _flip(cell: Vector2i) -> void:
+func _rotate(cell: Vector2i) -> void:
 	if _held:
-		_held.flipped = not _held.flipped
+		_held.turns += 1
 	elif placed.has(cell):
-		placed[cell].flipped = not placed[cell].flipped
+		placed[cell].turns += 1
 	else:
-		_ghost_flipped = not _ghost_flipped
-		_ghost.flipped = _ghost_flipped
+		_ghost_turns = (_ghost_turns + 1) % 4
+		_ghost.turns = _ghost_turns
 
 
 # --- Placing / moving -------------------------------------------------------
@@ -173,23 +179,23 @@ func _place_new(cell: Vector2i) -> void:
 	if d.is_tile:
 		grid.set_kind(cell, IsoGrid.Kind.DOCK)
 		return
-	var f := Furniture.new()
-	f.setup(d)
-	f.flipped = _ghost_flipped
-	objects.add_child(f)
-	_put(f, cell)
+	_spawn_piece(d, cell, _ghost_turns)
 
 
 ## Spawn a piece from saved data (for save/load).
-func spawn(id: String, cell: Vector2i, flip := false) -> void:
+func spawn(id: String, cell: Vector2i, turns := 0) -> void:
 	for d in Game.furniture_table:
 		if d.id == id and not d.is_tile:
-			var f := Furniture.new()
-			f.setup(d)
-			f.flipped = flip
-			objects.add_child(f)
-			_put(f, cell)
+			_spawn_piece(d, cell, turns)
 			return
+
+
+func _spawn_piece(d: FurnitureData, cell: Vector2i, turns: int) -> void:
+	var f := Furniture.new()
+	objects.add_child(f)
+	f.setup(d)
+	f.turns = turns
+	_put(f, cell)
 
 
 func _put(f: Furniture, cell: Vector2i) -> void:
@@ -208,15 +214,15 @@ func _unregister(cell: Vector2i) -> void:
 func _pick_up(cell: Vector2i) -> void:
 	_held = placed[cell]
 	_held_from = cell
-	_held_flip = _held.flipped
+	_held_turns = _held.turns
 	_unregister(cell)
 
 
 func _cancel_move() -> void:
 	if _held == null:
 		return
-	_held.flipped = _held_flip
-	_held.modulate = Color.WHITE
+	_held.turns = _held_turns
+	_held.set_ghost(false)
 	_put(_held, _held_from)
 	_held = null
 

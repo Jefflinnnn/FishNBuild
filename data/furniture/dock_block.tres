@@ -10,6 +10,6 @@ price = 10
 order = 0
 shape = "dock"
 color = Color(0.71, 0.51, 0.31, 1)
-sprite_path = "res://art/dock_block.png"
+model_path = "res://art/models/dock_block.glb"
 is_tile = true
 bite_speed_bonus = 0.0

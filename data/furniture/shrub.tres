@@ -10,6 +10,6 @@ price = 8
 order = 5
 shape = "shrub"
 color = Color(0.36, 0.66, 0.38, 1)
-sprite_path = "res://art/shrub.png"
+model_path = "res://art/models/shrub.glb"
 is_tile = false
 bite_speed_bonus = 0.0

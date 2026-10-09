@@ -10,6 +10,6 @@ price = 30
 order = 2
 shape = "desk"
 color = Color(0.62, 0.45, 0.32, 1)
-sprite_path = "res://art/furniture_desk.png"
+model_path = "res://art/models/desk.glb"
 is_tile = false
 bite_speed_bonus = 0.0
